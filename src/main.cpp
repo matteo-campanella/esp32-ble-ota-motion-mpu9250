@@ -5,6 +5,7 @@
 
 #define USE_WIFI false
 #define INT_PIN 34
+#define MOTION_TRESHOLD 20
 
 Logger logger;
 Leds leds;
@@ -15,6 +16,7 @@ bool isModemSleepOn = false;
 bool isGoToSleep = false;
 bool isWakeUp = false;
 bool motion = false;
+bool motionWakeUp = false;
 String command;
 TaskHandle_t peripheralTask;
 MPU9250_WE mpu;
@@ -96,6 +98,13 @@ void modem_awake() {
     //setCpuFrequencyMhz(240);
     btStart();
     ble_setup();
+}
+
+void esp_deep_sleep() {
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1);
+    logger.println("Entering Deep Sleep...");
+    delay(1000);
+    esp_deep_sleep_start();
 }
 
 void check_incoming_commands() {
@@ -184,7 +193,7 @@ void motionISR() {
   motion = true;
 }
 
-void mpu_setup() {
+void mpu_setup(bool forDeepSleep, bool fromDeepSleep) {
     Wire.begin();
     if(mpu.init()) {
         mpu.setSampleRateDivider(5);
@@ -195,10 +204,12 @@ void mpu_setup() {
         mpu.enableIntLatch(true);
         mpu.enableClearIntByAnyRead(false);
         mpu.enableInterrupt(MPU6500_WOM_INT);
-        mpu.setWakeOnMotionThreshold(5);
+        mpu.setWakeOnMotionThreshold(MOTION_TRESHOLD);
         mpu.enableWakeOnMotion(MPU9250_WOM_ENABLE, MPU9250_WOM_COMP_ENABLE);
-        attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
-        xTaskCreate(managePeripheral,"MPU",8192,NULL,1,&peripheralTask);
+        if (!forDeepSleep) {
+            attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
+            xTaskCreate(managePeripheral,"MPU",8192,NULL,1,&peripheralTask);
+        }
         logger.print("MPU+");
     }
     else {
@@ -207,13 +218,16 @@ void mpu_setup() {
 }
 
 void setup() {
+    motionWakeUp = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0);
     ota_setup();
     wifi_setup();    
     //leds.setup();
     ble_setup();
-    mpu_setup();
+    mpu_setup(true,motionWakeUp);
     //logger.udpListen();
-    logger.println("UP");
+    if (motionWakeUp) logger.println("MWUP");
+    else logger.println("UP");
+    esp_deep_sleep();
 }
 
 void loop() {
