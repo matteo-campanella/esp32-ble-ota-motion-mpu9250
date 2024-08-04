@@ -3,10 +3,6 @@
 #include <esp_wifi.h>
 #include <esp_sleep.h>
 
-#define USE_WIFI false
-#define INT_PIN 34
-#define MOTION_TRESHOLD 20
-
 Logger logger;
 Leds leds;
 BLEData bleData;
@@ -123,8 +119,8 @@ void check_incoming_commands() {
         ESP.restart();
     } 
     else if (command == "s" || command == "sleep") {
-        logger.println("Entering Modem Sleep...");
-        modem_sleep();
+        logger.println("Entering Sleep...");
+        esp_deep_sleep();
     }   
     else if (command == "u" || command == "upload") {
         logger.println("Uploading Log...");
@@ -148,11 +144,17 @@ void managePeripheral(void * pvParameters) {
             byte source = mpu.readAndClearInterrupts();
             logger.print("I");
             if(mpu.checkInterrupt(source, MPU9250_WOM_INT)) {
-                logger.print("M");
+                sleep_motion_counter=0;
+                wake_motion_counter++;
             }
             motion = false;
             mpu.readAndClearInterrupts();             
         }
+        else {
+            wake_motion_counter=0;
+            sleep_motion_counter++;
+        }        
+
         if ((now-lastlog) >= LOG_INTERVAL) { //do checks every 1 second
             lastlog = now;
             //stuff to do every LOG_INTERVAL
@@ -169,21 +171,23 @@ void managePeripheral(void * pvParameters) {
 
             if (!isModemSleepOn) ble_update(&bleData,&mpu);
 
-            if (sleep_motion_counter > SLEEP_TRIGGER_COUNT) {
+            if (sleep_motion_counter >= SLEEP_TRIGGER_COUNT) {
                 sleep_motion_counter = 0;
                 wake_motion_counter = 0;
-                if(!isModemSleepOn && !isGoToSleep) {
+                if (!isGoToSleep) isGoToSleep = true;
+/*                 if(!isModemSleepOn && !isGoToSleep) {
                     logger.println("Entering Modem Sleep Mode");
                     isGoToSleep = true;
-                }
+                } */
             }
-            if (wake_motion_counter > WAKE_TRIGGER_COUNT) {
+            if (wake_motion_counter >= WAKE_TRIGGER_COUNT) {
                 sleep_motion_counter = 0;
                 wake_motion_counter = 0;
-                if (isModemSleepOn && !isWakeUp) {  
+                if (!isWakeUp) isWakeUp = true;
+/*                 if (isModemSleepOn && !isWakeUp) {  
                     logger.println("Exiting Modem Sleep Mode");
                     isWakeUp = true;
-                }
+                } */
             }
         }
     }
@@ -193,7 +197,7 @@ void motionISR() {
   motion = true;
 }
 
-void mpu_setup(bool forDeepSleep, bool fromDeepSleep) {
+void mpu_setup() {
     Wire.begin();
     if(mpu.init()) {
         mpu.setSampleRateDivider(5);
@@ -206,10 +210,8 @@ void mpu_setup(bool forDeepSleep, bool fromDeepSleep) {
         mpu.enableInterrupt(MPU6500_WOM_INT);
         mpu.setWakeOnMotionThreshold(MOTION_TRESHOLD);
         mpu.enableWakeOnMotion(MPU9250_WOM_ENABLE, MPU9250_WOM_COMP_ENABLE);
-        if (!forDeepSleep) {
-            attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
-            xTaskCreate(managePeripheral,"MPU",8192,NULL,1,&peripheralTask);
-        }
+        attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
+        xTaskCreate(managePeripheral,"MPU",8192,NULL,1,&peripheralTask);
         logger.print("MPU+");
     }
     else {
@@ -217,27 +219,60 @@ void mpu_setup(bool forDeepSleep, bool fromDeepSleep) {
     }
 }
 
+void switchOn() {
+    logger.print("Switching ON");
+    digitalWrite(SWITCH_PIN,HIGH);
+}
+
+void switchOff() {
+    logger.print("Switching Off");
+    digitalWrite(SWITCH_PIN,LOW);
+}
+
+void switch_setup(bool status) {
+    pinMode(SWITCH_PIN,OUTPUT);
+    digitalWrite(SWITCH_PIN,status?HIGH:LOW);
+    logger.print(status?"SW+":"SW-");
+}
+
+void serial_setup() {
+  Serial.begin(115200);
+  Serial.println();
+  Serial.println();
+  Serial.flush();    
+}
+
 void setup() {
     motionWakeUp = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0);
-    ota_setup();
-    wifi_setup();    
+    if (!motionWakeUp) {
+        ota_setup();
+        wifi_setup();
+        switch_setup(true);
+    }
+    else {
+        serial_setup();
+        wifi_setup();
+        switch_setup(false);
+    }
     //leds.setup();
     ble_setup();
-    mpu_setup(true,motionWakeUp);
+    mpu_setup();
     //logger.udpListen();
     if (motionWakeUp) logger.println("MWUP");
     else logger.println("UP");
-    esp_deep_sleep();
 }
 
 void loop() {
     check_incoming_commands();
     if (isGoToSleep) {
-        modem_sleep();
+        //modem_sleep();
+        switchOff();
+        esp_deep_sleep();
         isGoToSleep = false;
     }
     if (isWakeUp) {
-        modem_awake();
+        //modem_awake();
+        switchOn();
         isWakeUp = false;
     }
 }
