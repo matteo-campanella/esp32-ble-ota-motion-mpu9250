@@ -1,0 +1,4 @@
+.pio/
+.vscode/
+include/customizations.h
+include/*credentials.h
