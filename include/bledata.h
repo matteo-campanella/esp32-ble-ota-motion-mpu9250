@@ -2,6 +2,6 @@
 
 class BLEData {
     public:
-        static double sampleData;
+        static unsigned int voltage;
         BLEData();
 };

@@ -1,4 +1,4 @@
 #include "bledata.h"
 
 BLEData::BLEData() {}
-double BLEData::sampleData;
+unsigned int BLEData::voltage;

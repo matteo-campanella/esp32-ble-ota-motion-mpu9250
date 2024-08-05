@@ -7,6 +7,7 @@
 #include "wifi_credentials.h"
 #include "ota.h"
 #include "leds.h"
+#include <movingAvg.h>
 
 #define TICK_INTERVAL 500
 #define LOG_INTERVAL 1000
@@ -14,5 +15,7 @@
 #define WAKE_TRIGGER_COUNT 30
 #define USE_WIFI false
 #define INT_PIN 34
+#define ADC_PIN 35
+#define ADC_VOLT_COEFF 12
 #define MOTION_TRESHOLD 3
 #define SWITCH_PIN 23 //TODO put right value

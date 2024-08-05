@@ -13,8 +13,10 @@ bool isGoToSleep = false;
 bool isWakeUp = false;
 bool motion = false;
 bool motionWakeUp = false;
+movingAvg voltage(10);
+
 String command;
-TaskHandle_t peripheralTask;
+TaskHandle_t MPUTask,commTask,sensorsTask;
 MPU9250_WE mpu;
 
 void wifi_off() {
@@ -109,11 +111,11 @@ void check_incoming_commands() {
     // command = logger.udpReceive();
     if (command.length()==0) return;
     command.trim();
-    if (command == "d" || command == "gps") {
+    if (command == "d" || command == "debug") {
         debug = !debug;
         logger.printfln("Debug %s...", debug ? "ON" : "OFF");
     } 
-    else if (command == "" || command == "reset") {
+    else if (command == "r" || command == "reset") {
         logger.println("Restarting ESP...");
         delay(1000);
         ESP.restart();
@@ -126,9 +128,30 @@ void check_incoming_commands() {
         logger.println("Uploading Log...");
         //TODO implement upload
     }
+    else if (command == "u" || command == "dump") {
+        logger.println("Dumping Data...");
+        logger.printf("V: %d\n",bleData.voltage);
+        logger.println("End Dumping Data");
+    }   
 }
 
-void managePeripheral(void * pvParameters) {
+void manageSensors(void * pvParameters) {
+    voltage.begin();
+    for(;;) {
+        voltage.reading((analogRead(ADC_PIN)*ADC_VOLT_COEFF)/4095);
+        bleData.voltage = voltage.getAvg();
+        delay(200);       
+    }
+}
+
+void manageComms(void * pvParameters) {
+    for(;;) {
+        if (!isModemSleepOn) ble_update(&bleData);
+        delay(2000);
+    }
+}
+
+void manageMPU(void * pvParameters) {
     unsigned long last = millis();
     unsigned long lastlog = last;
     unsigned int sleep_motion_counter = 0;
@@ -167,9 +190,7 @@ void managePeripheral(void * pvParameters) {
 //                logger.println(record);
 //            }
 //            else logger.print(".");
-            logger.print("L");
 
-            if (!isModemSleepOn) ble_update(&bleData,&mpu);
 
             if (sleep_motion_counter >= SLEEP_TRIGGER_COUNT) {
                 sleep_motion_counter = 0;
@@ -189,6 +210,7 @@ void managePeripheral(void * pvParameters) {
                     isWakeUp = true;
                 } */
             }
+            logger.print(".");
         }
     }
 }
@@ -200,6 +222,12 @@ void motionISR() {
 void mpu_setup() {
     Wire.begin();
     if(mpu.init()) {
+        mpu.enableCycle(false);
+        mpu.sleep(false);
+        mpu.enableGyrStandby(false);
+        mpu.enableAccAxes(MPU9250_ENABLE_XYZ);
+        mpu.enableGyrAxes(MPU9250_ENABLE_000);
+
         mpu.setSampleRateDivider(5);
         mpu.setAccRange(MPU6500_ACC_RANGE_2G);
         mpu.enableAccDLPF(true);
@@ -210,8 +238,12 @@ void mpu_setup() {
         mpu.enableInterrupt(MPU6500_WOM_INT);
         mpu.setWakeOnMotionThreshold(MOTION_TRESHOLD);
         mpu.enableWakeOnMotion(MPU9250_WOM_ENABLE, MPU9250_WOM_COMP_ENABLE);
+
+        mpu.setLowPowerAccDataRate(MPU6500_LP_ACC_ODR_125);
+        mpu.enableCycle(true);
+
         attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
-        xTaskCreate(managePeripheral,"MPU",8192,NULL,1,&peripheralTask);
+        xTaskCreate(manageMPU,"MPU",8192,NULL,1,&MPUTask);
         logger.print("MPU+");
     }
     else {
@@ -232,7 +264,13 @@ void switchOff() {
 void switch_setup(bool status) {
     pinMode(SWITCH_PIN,OUTPUT);
     digitalWrite(SWITCH_PIN,status?HIGH:LOW);
-    logger.print(status?"SW+":"SW-");
+    logger.print(status?"SWT+":"SWT-");
+}
+
+void sensors_setup() {
+    analogReadResolution(12);
+    analogSetAttenuation(ADC_0db);
+    logger.print("SNS+");
 }
 
 void serial_setup() {
@@ -257,7 +295,10 @@ void setup() {
     //leds.setup();
     ble_setup();
     mpu_setup();
+    sensors_setup();
     //logger.udpListen();
+    xTaskCreate(manageSensors,"SNS",8192,NULL,1,&sensorsTask);
+    xTaskCreate(manageComms,"COM",8192,NULL,1,&commTask);
     if (motionWakeUp) logger.println("MWUP");
     else logger.println("UP");
 }
