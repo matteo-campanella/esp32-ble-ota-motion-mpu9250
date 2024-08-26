@@ -13,7 +13,7 @@ bool isGoToSleep = false;
 bool isWakeUp = false;
 bool motion = false;
 bool motionWakeUp = false;
-movingAvg voltage(10);
+movingAvg voltage(10),temperature(10);
 
 String command;
 TaskHandle_t MPUTask,commTask,sensorsTask;
@@ -128,9 +128,10 @@ void check_incoming_commands() {
         logger.println("Uploading Log...");
         //TODO implement upload
     }
-    else if (command == "u" || command == "dump") {
+    else if (command == "m" || command == "dump") {
         logger.println("Dumping Data...");
         logger.printf("V: %d\n",bleData.voltage);
+        logger.printf("T: %d\n",bleData.temperature);
         logger.println("End Dumping Data");
     }   
 }
@@ -140,7 +141,9 @@ void manageSensors(void * pvParameters) {
     for(;;) {
         voltage.reading((analogRead(ADC_PIN)*ADC_VOLT_COEFF)/4095);
         bleData.voltage = voltage.getAvg();
-        delay(200);       
+        temperature.reading(mpu.getTemperature()*100);
+        bleData.temperature = temperature.getAvg();
+        delay(200); 
     }
 }
 
@@ -156,6 +159,7 @@ void manageMPU(void * pvParameters) {
     unsigned long lastlog = last;
     unsigned int sleep_motion_counter = 0;
     unsigned int wake_motion_counter = 0;
+    temperature.begin();
 
     for(;;) {
         delay(50);
@@ -252,12 +256,12 @@ void mpu_setup() {
 }
 
 void switchOn() {
-    logger.print("Switching ON");
+    logger.println("Switching ON");
     digitalWrite(SWITCH_PIN,HIGH);
 }
 
 void switchOff() {
-    logger.print("Switching Off");
+    logger.println("Switching Off");
     digitalWrite(SWITCH_PIN,LOW);
 }
 
