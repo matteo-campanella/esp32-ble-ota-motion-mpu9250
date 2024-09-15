@@ -16,8 +16,8 @@ bool motionWakeUp = false;
 movingAvg voltage(10),temperature(10);
 
 String command;
-TaskHandle_t MPUTask,commTask,sensorsTask;
-MPU9250_WE mpu;
+TaskHandle_t BMITask,MPUTask,commTask,sensorsTask;
+//MPU9250_WE mpu;
 
 void wifi_off() {
     WiFi.disconnect(true,false);
@@ -99,7 +99,7 @@ void modem_awake() {
 }
 
 void esp_deep_sleep() {
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,1);
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_34,0);
     logger.println("Entering Deep Sleep...");
     delay(1000);
     esp_deep_sleep_start();
@@ -141,8 +141,6 @@ void manageSensors(void * pvParameters) {
     for(;;) {
         voltage.reading((analogRead(ADC_PIN)*ADC_VOLT_COEFF)/4095);
         bleData.voltage = voltage.getAvg();
-        temperature.reading(mpu.getTemperature()*100);
-        bleData.temperature = temperature.getAvg();
         delay(200); 
     }
 }
@@ -154,7 +152,11 @@ void manageComms(void * pvParameters) {
     }
 }
 
-void manageMPU(void * pvParameters) {
+void motionISR() {
+  motion = true;
+}
+
+void manageBMI(void * pvParameters) {
     unsigned long last = millis();
     unsigned long lastlog = last;
     unsigned int sleep_motion_counter = 0;
@@ -168,14 +170,10 @@ void manageMPU(void * pvParameters) {
         last=now;
         //stuff to do every TICK_INTERVAL
         if (motion) {
-            byte source = mpu.readAndClearInterrupts();
             logger.print("I");
-            if(mpu.checkInterrupt(source, MPU9250_WOM_INT)) {
-                sleep_motion_counter=0;
-                wake_motion_counter++;
-            }
-            motion = false;
-            mpu.readAndClearInterrupts();             
+            sleep_motion_counter=0;
+            wake_motion_counter++;
+            motion = false;             
         }
         else {
             wake_motion_counter=0;
@@ -185,16 +183,6 @@ void manageMPU(void * pvParameters) {
         if ((now-lastlog) >= LOG_INTERVAL) { //do checks every 1 second
             lastlog = now;
             //stuff to do every LOG_INTERVAL
-
-//            if (gps.location.isValid() && isLocUpdated) {
-//                char record[80];
-//                snprintf(record, sizeof(record), TIMESTAMP_FORMAT ";%.6f;%.6f;%.2f;%.2f;%.2f;%d",
-//                        TIMESTAMP_ARGS,
-//                        gps.location.lat(), gps.location.lng(), gps.altitude.meters(), gps.speed.kmph(), gps.hdop.hdop(), gps.satellites.value());
-//                logger.println(record);
-//            }
-//            else logger.print(".");
-
 
             if (sleep_motion_counter >= SLEEP_TRIGGER_COUNT) {
                 sleep_motion_counter = 0;
@@ -217,43 +205,21 @@ void manageMPU(void * pvParameters) {
             logger.print(".");
         }
     }
-}
+}       
 
-void motionISR() {
-  motion = true;
-}
-
-void mpu_setup() {
+void bmi160_setup() {
     Wire.begin();
-    if(mpu.init()) {
-        mpu.enableCycle(false);
-        mpu.sleep(false);
-        mpu.enableGyrStandby(false);
-        mpu.enableAccAxes(MPU9250_ENABLE_XYZ);
-        mpu.enableGyrAxes(MPU9250_ENABLE_000);
-
-        mpu.setSampleRateDivider(5);
-        mpu.setAccRange(MPU6500_ACC_RANGE_2G);
-        mpu.enableAccDLPF(true);
-        mpu.setAccDLPF(MPU6500_DLPF_6);
-        mpu.setIntPinPolarity(MPU6500_ACT_HIGH);
-        mpu.enableIntLatch(true);
-        mpu.enableClearIntByAnyRead(false);
-        mpu.enableInterrupt(MPU6500_WOM_INT);
-        mpu.setWakeOnMotionThreshold(MOTION_TRESHOLD);
-        mpu.enableWakeOnMotion(MPU9250_WOM_ENABLE, MPU9250_WOM_COMP_ENABLE);
-
-        mpu.setLowPowerAccDataRate(MPU6500_LP_ACC_ODR_125);
-        mpu.enableCycle(true);
-
-        attachInterrupt(digitalPinToInterrupt(INT_PIN), motionISR, RISING);
-        xTaskCreate(manageMPU,"MPU",8192,NULL,1,&MPUTask);
-        logger.print("MPU+");
+    if (BMI160.begin(BMI160GenClass::I2C_MODE, Wire, 0x69, INT_PIN)) {    
+        BMI160.attachInterrupt(motionISR);
+        BMI160.setIntMotionEnabled(true);
+        xTaskCreate(manageBMI,"BMI",8192,NULL,1,&BMITask);
+        logger.print("BMI+");
     }
     else {
-        logger.print("MPU-");
+        logger.print("BMI-");
     }
 }
+
 
 void switchOn() {
     logger.println("Switching ON");
@@ -298,7 +264,7 @@ void setup() {
     }
     //leds.setup();
     ble_setup();
-    mpu_setup();
+    bmi160_setup();
     sensors_setup();
     //logger.udpListen();
     xTaskCreate(manageSensors,"SNS",8192,NULL,1,&sensorsTask);

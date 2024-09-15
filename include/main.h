@@ -1,6 +1,7 @@
 #include <WifiUdp.h>
 #include <Wire.h>
 #include <MPU9250_WE.h>
+#include <BMI160Gen.h>
 #include "logging.h"
 #include "ble.h"
 #include "bledata.h"
@@ -19,3 +20,4 @@
 #define ADC_VOLT_COEFF 15
 #define MOTION_TRESHOLD 3
 #define SWITCH_PIN 23 //TODO put right value
+#undef DEBUG
