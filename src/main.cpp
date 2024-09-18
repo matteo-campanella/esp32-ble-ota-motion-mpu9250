@@ -13,16 +13,16 @@ bool isGoToSleep = false;
 bool isWakeUp = false;
 bool motion = false;
 bool motionWakeUp = false;
+bool switchStatus = false;
 movingAvg voltage(10),temperature(10);
 
 String command;
-TaskHandle_t BMITask,MPUTask,commTask,sensorsTask;
-//MPU9250_WE mpu;
+TaskHandle_t BMITask,commTask,sensorsTask;
 
 void wifi_off() {
     WiFi.disconnect(true,false);
     WiFi.mode(WIFI_OFF);
-    //leds.wifiStatus=Leds::WIFISTATUS::wifi_off;
+    leds.wifiStatus=Leds::WIFISTATUS::wifi_off;
     logger.print("NET-");
 }
 
@@ -131,7 +131,6 @@ void check_incoming_commands() {
     else if (command == "m" || command == "dump") {
         logger.println("Dumping Data...");
         logger.printf("V: %d\n",bleData.voltage);
-        logger.printf("T: %d\n",bleData.temperature);
         logger.println("End Dumping Data");
     }   
 }
@@ -171,13 +170,16 @@ void manageBMI(void * pvParameters) {
         //stuff to do every TICK_INTERVAL
         if (motion) {
             logger.print("I");
+            Leds::motionStatus = Leds::MOTIONSTATUS::detected;
             sleep_motion_counter=0;
             wake_motion_counter++;
             motion = false;             
         }
         else {
+            Leds::motionStatus = switchStatus?Leds::MOTIONSTATUS::on:Leds::MOTIONSTATUS::off;
             wake_motion_counter=0;
-            sleep_motion_counter++;
+            if (switchStatus) sleep_motion_counter++;
+            else sleep_motion_counter+=3; //if it's not on make it go to sleep faster
         }        
 
         if ((now-lastlog) >= LOG_INTERVAL) { //do checks every 1 second
@@ -220,20 +222,25 @@ void bmi160_setup() {
     }
 }
 
-
 void switchOn() {
     logger.println("Switching ON");
     digitalWrite(SWITCH_PIN,HIGH);
+    switchStatus = true;
+    Leds::motionStatus = Leds::MOTIONSTATUS::on;
 }
 
 void switchOff() {
     logger.println("Switching Off");
     digitalWrite(SWITCH_PIN,LOW);
+    switchStatus = false;
+    Leds::motionStatus = Leds::MOTIONSTATUS::off;
 }
 
 void switch_setup(bool status) {
     pinMode(SWITCH_PIN,OUTPUT);
     digitalWrite(SWITCH_PIN,status?HIGH:LOW);
+    switchStatus = status;
+    Leds::motionStatus = status?Leds::MOTIONSTATUS::on:Leds::MOTIONSTATUS::off;
     logger.print(status?"SWT+":"SWT-");
 }
 
@@ -262,7 +269,7 @@ void setup() {
         wifi_setup();
         switch_setup(false);
     }
-    //leds.setup();
+    leds.setup();
     ble_setup();
     bmi160_setup();
     sensors_setup();
