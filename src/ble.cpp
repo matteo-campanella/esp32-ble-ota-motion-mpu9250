@@ -4,7 +4,6 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <Arduino.h>
-#include <MPU9250_WE.h>
 
 #include "ble.h"
 #include "logging.h"
@@ -12,9 +11,7 @@
 #include <string>
 
 BLEServer* pServer = NULL;
-BLECharacteristic* pLocCharacteristic = NULL;
-BLECharacteristic* pSpeedCharacteristic = NULL;
-BLECharacteristic* pAltCharacteristic = NULL;
+BLECharacteristic* pSensCharacteristic = NULL;
 BLECharacteristic* pSettingsCharacteristic = NULL;
 BLECharacteristic *pTxCharacteristic, *pRxCharacteristic;
 bool deviceConnected = false;
@@ -32,11 +29,9 @@ extern Leds leds;
 #define UART_CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 #define UART_CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
-#define GPS_SERVICE_UUID        "f7cfe716-cf46-440c-b763-2b10f181051e"
-#define LOC_CHARACTERISTIC_UUID "0a75ba9e-7cf2-490b-9811-f16af03730db"
-#define SPD_CHARACTERISTIC_UUID "f37a98dd-7da6-4578-adae-9dbd481b7034"
-#define ALT_CHARACTERISTIC_UUID "0538d525-011e-450b-a9e4-920010a0cf63"
-#define SETTINGS_CHARACTERISTIC_UUID "8ec19f5a-d47a-49f8-b91f-cd8c9acd1529"
+#define MOTION_SERVICE_UUID          "d96011fc-8ab0-42d9-93bb-ae202331297a"
+#define SENSORS_CHARACTERISTIC_UUID  "7bfb13b9-917f-44e6-9eac-7739088a0783"
+#define SETTINGS_CHARACTERISTIC_UUID "235fefc9-58fd-4f84-977a-9a72ae348007"
 
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -84,28 +79,14 @@ void ble_setup() {
   pRxCharacteristic->setCallbacks(new MyCallbacks());     
   pUARTService->start();
 
-  //GPS Service
-  BLEService *pGpsService = pServer->createService(GPS_SERVICE_UUID);
-  pLocCharacteristic = pGpsService->createCharacteristic(
-                      LOC_CHARACTERISTIC_UUID,
+  //Motion Service
+  BLEService *pGpsService = pServer->createService(MOTION_SERVICE_UUID);
+  pSensCharacteristic = pGpsService->createCharacteristic(
+                      SENSORS_CHARACTERISTIC_UUID,
                       BLECharacteristic::PROPERTY_READ   |
                       BLECharacteristic::PROPERTY_NOTIFY
                     );
-  pLocCharacteristic->addDescriptor(new BLE2902());
-
-  pSpeedCharacteristic = pGpsService->createCharacteristic(
-                      SPD_CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-  pSpeedCharacteristic->addDescriptor(new BLE2902());
-
-  pAltCharacteristic = pGpsService->createCharacteristic(
-                      ALT_CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-  pAltCharacteristic->addDescriptor(new BLE2902());
+  pSensCharacteristic->addDescriptor(new BLE2902());
 
   pSettingsCharacteristic = pGpsService->createCharacteristic(
                       SETTINGS_CHARACTERISTIC_UUID,
@@ -116,7 +97,7 @@ void ble_setup() {
 
   pGpsService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(GPS_SERVICE_UUID);
+  pAdvertising->addServiceUUID(MOTION_SERVICE_UUID);
   pAdvertising->addServiceUUID(UART_SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   BLEDevice::startAdvertising();
@@ -143,25 +124,9 @@ String ble_uart_receive() {
 
 void ble_update(BLEData *data) {
   if (deviceConnected) {
-/*       if (gps->location.isValid()) {
-      snprintf(outBuffer, sizeof(outBuffer), "%.3f;%.3f;%.2f;%d",
-        gps->location.lat(), gps->location.lng(), gps->hdop.hdop(), gps->satellites.value());
-      pLocCharacteristic->setValue(outBuffer);
-      pLocCharacteristic->notify();
-      delay(10);
-    }
-    if (gps->speed.isValid()) {
-      snprintf(outBuffer, sizeof(outBuffer),"%.2f;%.2f;%.2f",data->min_speed,data->speed,data->max_speed);
-      pSpeedCharacteristic->setValue(outBuffer);
-      pSpeedCharacteristic->notify(); 
-      delay(10); 
-    }
-    if (gps->altitude.isValid()) {
-      snprintf(outBuffer, sizeof(outBuffer),"%.2f;%.2f;%.2f",data->min_alt,data->alt,data->max_alt);
-      pAltCharacteristic->setValue(outBuffer);
-      pAltCharacteristic->notify();
-      delay(10);
-    } */
+    snprintf(outBuffer, sizeof(outBuffer), "%.2f",BLEData::voltage/100.0);
+    pSensCharacteristic->setValue(outBuffer);
+    pSensCharacteristic->notify();
   }
   // disconnecting
   if (!deviceConnected && oldDeviceConnected) {

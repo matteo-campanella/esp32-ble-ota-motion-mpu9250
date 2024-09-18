@@ -4,17 +4,15 @@ TaskHandle_t Leds::redLedTask,Leds::greenLedTask;
 
 unsigned int Leds::redOn = 100;
 unsigned int Leds::redOff = 100;
-unsigned int Leds::greenOn = 100;
-unsigned int Leds::greenOff = 100;
 
 Leds::BTSTATUS Leds::btStatus;
 Leds::WIFISTATUS Leds::wifiStatus;
-Leds::GPSSTATUS Leds::gpsStatus; 
+Leds::MOTIONSTATUS Leds::motionStatus; 
 
 extern Logger logger;
 
 void Leds::manageRedLed(void * pvParameters){
-  unsigned int btLedOn,btLedOff,wifiLedOn,wifiLedOff;
+  unsigned int btLedOn,btLedOff,wifiLedOn,wifiLedOff,motionLedOn,motionLedOff;
   for(;;){    
     switch (btStatus) {
       case bt_off:
@@ -44,35 +42,31 @@ void Leds::manageRedLed(void * pvParameters){
           wifiLedOff = 1;
           break;
     }
-    redOn = btLedOn;
-    redOff = btLedOff;
+    switch (motionStatus) {
+      case on:
+        motionLedOn = 999;
+        motionLedOff = 1;
+        break;
+      case off:
+        motionLedOn = 1;
+        motionLedOff = 999;
+        break;
+      case detected:
+        motionLedOn = 50;
+        motionLedOff = 50;
+      break;
+    }
+    redOn = motionLedOn;
+    redOff = motionLedOff;
     digitalWrite(RED_LED, HIGH);
     delay(redOn);
     digitalWrite(RED_LED, LOW);
     delay(redOff);
   } 
 }
-
-void Leds::manageGreenLed(void * pvParameters){
-  for(;;){
-    switch(gpsStatus) {
-      case searching:
-        greenOn=greenOff=100;
-        break;
-      case locked:
-        greenOn=greenOff=1000;
-    }    
-    digitalWrite(GREEN_LED, HIGH);
-    delay(greenOn);
-    digitalWrite(GREEN_LED, LOW);
-    delay(greenOff);
-  }
-}
   
 void Leds::setup() {
     pinMode(RED_LED,OUTPUT);
-    pinMode(GREEN_LED,OUTPUT);
-    xTaskCreate(Leds::manageRedLed,"redLed",1024,NULL,10,&redLedTask);
-    xTaskCreate(Leds::manageGreenLed,"greenLed",1024,NULL,10,&greenLedTask);  
+    xTaskCreate(Leds::manageRedLed,"redLed",1024,NULL,10,&redLedTask); 
     logger.print("LED+"); 
 }

@@ -1,4 +1,3 @@
-#include <MPU9250_WE.h>
 #include <string>
 #include "bledata.h"
 

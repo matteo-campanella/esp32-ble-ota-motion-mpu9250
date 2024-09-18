@@ -1,8 +1,7 @@
 #include <Arduino.h>
 #include "logging.h"
 
-#define RED_LED 22
-#define GREEN_LED 23
+#define RED_LED 23
 
 class Leds{
     private:
@@ -19,14 +18,14 @@ class Leds{
             bt_connected,
             bt_off
         };
-        enum GPSSTATUS {
-            searching,
-            locked
+        enum MOTIONSTATUS {
+            off,
+            detected,
+            on
         };
         static WIFISTATUS wifiStatus;
         static BTSTATUS btStatus;
-        static GPSSTATUS gpsStatus;
+        static MOTIONSTATUS motionStatus;
         static void setup();
         static void manageRedLed(void *);
-        static void manageGreenLed(void *);
 };
