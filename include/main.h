@@ -1,3 +1,4 @@
+#include <CircularBuffer.hpp>
 #include <WifiUdp.h>
 #include <Wire.h>
 #include <BMI160Gen.h>

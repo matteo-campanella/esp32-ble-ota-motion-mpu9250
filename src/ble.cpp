@@ -1,4 +1,3 @@
-#include <CircularBuffer.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -124,7 +123,7 @@ String ble_uart_receive() {
 
 void ble_update(BLEData *data) {
   if (deviceConnected) {
-    snprintf(outBuffer, sizeof(outBuffer), "%.2f",BLEData::voltage/100.0);
+    snprintf(outBuffer, sizeof(outBuffer), "%.2f;%.2f",BLEData::voltage/100.0,BLEData::temperature/100.0);
     pSensCharacteristic->setValue(outBuffer);
     pSensCharacteristic->notify();
   }

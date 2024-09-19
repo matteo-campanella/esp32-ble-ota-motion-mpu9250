@@ -140,6 +140,8 @@ void manageSensors(void * pvParameters) {
     for(;;) {
         voltage.reading((analogRead(ADC_PIN)*ADC_VOLT_COEFF)/4095);
         bleData.voltage = voltage.getAvg();
+        temperature.reading(BMI160.getTemperature()/5.12+2300);
+        bleData.temperature = temperature.getAvg();
         delay(200); 
     }
 }
